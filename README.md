@@ -217,10 +217,6 @@ private void HandleBusinessLogic(ParsedResult result)
 HTTP 路径过滤已启用，关键字列表：
   - /api/
 
-Detected network devices:
-[0] \Device\NPF_{...} - Intel(R) Ethernet Connection [PHYSICAL]
-[1] \Device\NPF_{...} - Npcap Loopback Adapter [LOOPBACK/NPCAP]
-...
 Using device (from config/auto): Npcap Loopback Adapter
 Packet capture started. Press Ctrl+C to stop.
 
