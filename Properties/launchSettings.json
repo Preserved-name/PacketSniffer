@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "PacketSniffer": {
+      "commandName": "Project",
+      "commandLineArgs": "5005"
+    }
+  }
+}
