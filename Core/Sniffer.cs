@@ -34,6 +34,12 @@ public class Sniffer
     public bool FilterByDestinationPort { get; set; } = true;
 
     /// <summary>
+    /// 优先选择的网卡关键字（从 Name/Description 中模糊匹配）
+    /// 由外部配置注入；为空则使用自动选择策略。
+    /// </summary>
+    public string? PreferredDeviceKeyword { get; set; }
+
+    /// <summary>
     /// 数据包捕获事件
     /// 参数：payload, sourcePort, destinationPort, protocol
     /// </summary>
@@ -55,41 +61,14 @@ public class Sniffer
             throw new InvalidOperationException("No network devices found");
         }
 
-        // 列出所有网卡供用户选择
-        Console.WriteLine("Detected network devices:");
-        for (int i = 0; i < devices.Count; i++)
-        {
-            var dev = devices[i];
-            var tag = GetDeviceTag(dev);
-            Console.WriteLine($"[{i}] {dev.Name} - {dev.Description} {tag}");
-        }
+        // 根据配置关键字选择网卡；如果未配置或匹配失败，则使用自动策略
+        var selected = SelectDeviceByKeyword(devices, PreferredDeviceKeyword) ?? SelectBestDevice(devices) ?? devices[0];
 
+        
         Console.WriteLine();
-        Console.Write("请选择要使用的网卡索引（直接回车使用推荐网卡）：");
-        var input = Console.ReadLine();
+        Console.WriteLine($"Using device (from config/auto): {selected.Description ?? selected.Name}");
 
-        ICaptureDevice? selected = null;
-
-        if (string.IsNullOrWhiteSpace(input))
-        {
-            // 未输入则自动选择推荐网卡（物理网卡优先，其次 Npcap Loopback）
-            selected = SelectBestDevice(devices);
-            Console.WriteLine(selected != null
-                ? "未选择网卡索引，已自动选择推荐网卡。"
-                : "未能找到推荐网卡，将使用第一个设备。");
-        }
-        else if (int.TryParse(input, out var index) && index >= 0 && index < devices.Count)
-        {
-            selected = devices[index];
-        }
-        else
-        {
-            Console.WriteLine("输入无效，将自动选择推荐网卡。");
-            selected = SelectBestDevice(devices);
-        }
-
-        _device = selected ?? devices[0];
-        Console.WriteLine($"Using device: {_device.Description ?? _device.Name}");
+        _device = selected;
 
         _device.Open(DeviceModes.Promiscuous, 1000);
         _device.OnPacketArrival += Device_OnPacketArrival;
@@ -210,6 +189,16 @@ public class Sniffer
 
         Console.WriteLine("No real NIC found, using first available adapter.");
         return devices.FirstOrDefault();
+    }
+
+    private ICaptureDevice? SelectDeviceByKeyword(CaptureDeviceList devices, string? keyword)
+    {
+        if (string.IsNullOrWhiteSpace(keyword))
+            return null;
+
+        var lower = keyword.ToLowerInvariant();
+        return devices.FirstOrDefault(d =>
+            ($"{d.Name} {d.Description}").ToLowerInvariant().Contains(lower));
     }
 
     private string GetDeviceTag(ICaptureDevice dev)

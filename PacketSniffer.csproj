@@ -13,5 +13,9 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Include="config.json" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+
 </Project>
 

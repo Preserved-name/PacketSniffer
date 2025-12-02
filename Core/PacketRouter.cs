@@ -66,14 +66,9 @@ public class PacketRouter
 
         if (result != null)
         {
-            // 只关注 HTTP 请求
-            if (!string.Equals(result.Protocol, "http", StringComparison.OrdinalIgnoreCase))
-            {
-                return;
-            }
-
-            // 必须是 HTTP REQUEST（不是 RESPONSE）
-            if (!result.Fields.TryGetValue("http_type", out var httpType) ||
+            // 只关注 HTTP Request
+            if (!string.Equals(result.Protocol, "http", StringComparison.OrdinalIgnoreCase) ||
+                !result.Fields.TryGetValue("http_type", out var httpType) ||
                 !httpType.Equals("request", StringComparison.OrdinalIgnoreCase) ||
                 !result.Fields.TryGetValue("request_line", out var requestLine))
             {
@@ -99,10 +94,8 @@ public class PacketRouter
                 }
             }
 
-            // 记录时间戳
+            // 记录时间戳和基本信息
             result.Timestamp = DateTime.Now;
-
-            // 简单记录一些字段（便于后续扩展）
             result.Fields["source_port"] = sourcePort.ToString();
             result.Fields["destination_port"] = destinationPort.ToString();
             result.Fields["transport_protocol"] = protocol;
@@ -112,12 +105,11 @@ public class PacketRouter
             Console.WriteLine("======================================================================================================================");
             Console.WriteLine($"[{result.Timestamp:yyyy-MM-dd HH:mm:ss.fff}] {method} {path}  (src:{sourcePort} -> dst:{destinationPort})");
 
-            // 如仍希望附加业务逻辑（比如根据路径触发），可以保留
-            HandleBusinessLogic(result);
+            // 暂不做后续业务处理；后续有需求时可以在这里调用 HandleBusinessLogic(result)
         }
     }
 
-    private void HandleBusinessLogic(ParsedResult result)
+    public void HandleBusinessLogic(ParsedResult result)
     {
         // 如果 Fields 包含 "userId"，打印 "检测到用户操作 userId=xxx"
         if (result.Fields.ContainsKey("userId"))

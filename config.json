@@ -1,0 +1,11 @@
+{
+  "DeviceKeyword": "loopback",
+  "Ports": [ 5005 ],
+  "FilterSourcePort": true,
+  "FilterDestinationPort": true,
+  "HttpPathFilters": [
+    "/api/"
+  ]
+}
+
+

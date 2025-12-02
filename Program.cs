@@ -1,12 +1,14 @@
 using PacketSniffer.Core;
 using PacketSniffer.Parsers;
 using PacketSniffer.Models;
+using PacketSniffer.Config;
 
 namespace PacketSniffer;
 
 class Program
 {
     private static Sniffer? _sniffer;
+    private static readonly AppSettings _config = AppConfig.Load();
 
     static void Main(string[] args)
     {
@@ -15,18 +17,18 @@ class Program
 
         if (fullPacketMode)
         {
-            RunFullPacketMode(args);
+            RunFullPacketMode();
         }
         else
         {
-            RunParseMode(args);
+            RunParseMode();
         }
     }
 
     /// <summary>
     /// 运行协议解析模式（默认模式）
     /// </summary>
-    private static void RunParseMode(string[] args)
+    private static void RunParseMode()
     {
         Console.WriteLine("=== Packet Sniffer - Protocol Parse Mode ===");
 
@@ -35,8 +37,8 @@ class Program
             // 1. 初始化 Sniffer
             _sniffer = new Sniffer();
 
-            // 2. 配置端口过滤（从命令行参数或使用默认配置）
-            ConfigurePortFilter(_sniffer, args);
+            // 2. 根据配置文件设置网卡和端口过滤
+            ConfigureSnifferFromConfig(_sniffer, _config);
 
             // 3. 初始化 PacketRouter 并注册解析器
             var router = new PacketRouter();
@@ -45,7 +47,7 @@ class Program
             router.RegisterParser(new BinaryParser()); // 兜底解析器
 
             // 3.1 配置 HTTP 路径过滤（只对 HTTP 请求路径生效）
-            ConfigureHttpPathFilter(router);
+            ConfigureHttpPathFilter(router, _config);
 
             // 4. 注册 Sniffer 的包捕获事件
             _sniffer.OnPacketCaptured += (payload, sourcePort, destPort, protocol) =>
@@ -86,7 +88,7 @@ class Program
     /// <summary>
     /// 运行完整包信息模式
     /// </summary>
-    private static void RunFullPacketMode(string[] args)
+    private static void RunFullPacketMode()
     {
         Console.WriteLine("=== Packet Sniffer - Full Packet Info Mode ===");
         Console.WriteLine("此模式将打印所有捕获数据包的完整信息\n");
@@ -96,8 +98,8 @@ class Program
             // 1. 初始化 Sniffer
             _sniffer = new Sniffer();
 
-            // 2. 配置端口过滤（从命令行参数）
-            ConfigurePortFilter(_sniffer, args);
+            // 2. 根据配置文件设置网卡和端口过滤
+            ConfigureSnifferFromConfig(_sniffer, _config);
 
             // 3. 初始化包信息打印器
             var printer = new PacketPrinter(
@@ -176,69 +178,70 @@ class Program
     }
 
     /// <summary>
-    /// 配置端口过滤
-    /// 支持从命令行参数读取端口，格式：dotnet run [--full] [port1] [port2] ...
-    /// 例如：dotnet run 80 443 8080
-    /// 例如：dotnet run --full 80 443
+    /// 根据配置文件设置 Sniffer 的端口过滤和网卡关键字
     /// </summary>
-    private static void ConfigurePortFilter(Sniffer sniffer, string[] args)
+    private static void ConfigureSnifferFromConfig(Sniffer sniffer, AppSettings config)
     {
-        var ports = new HashSet<int>();
-
-        // 从命令行参数解析端口（跳过 --full, -f 等选项）
-        foreach (var arg in args)
+        // 配置端口过滤
+        if (config.Ports is { Count: > 0 })
         {
-            if (arg == "--full" || arg == "-f")
-                continue;
+            sniffer.AllowedPorts = new HashSet<int>(config.Ports);
+            sniffer.FilterBySourcePort = config.FilterSourcePort;
+            sniffer.FilterByDestinationPort = config.FilterDestinationPort;
 
-            if (int.TryParse(arg, out int port) && port > 0 && port <= 65535)
-            {
-                ports.Add(port);
-            }
-            else if (!arg.StartsWith("--") && !arg.StartsWith("-"))
-            {
-                Console.WriteLine($"警告: 无效的端口号 '{arg}'，已忽略");
-            }
+            var portsList = string.Join(", ", sniffer.AllowedPorts.OrderBy(p => p));
+            Console.WriteLine($"端口过滤: 已启用，监听端口: {portsList}");
+            Console.WriteLine($"过滤模式: 源端口={sniffer.FilterBySourcePort}, 目标端口={sniffer.FilterByDestinationPort}");
         }
-
-        // 如果命令行没有指定端口，使用默认配置（监听所有端口）
-        if (ports.Count == 0)
+        else
         {
-            // 默认：监听所有端口
             sniffer.AllowedPorts = null;
             sniffer.FilterBySourcePort = true;
             sniffer.FilterByDestinationPort = true;
             Console.WriteLine("端口过滤: 已禁用（监听所有端口）");
-            Console.WriteLine("提示: 使用命令行参数指定端口，例如: dotnet run 80 443 8080");
-            Console.WriteLine("提示: 使用 --full 参数查看完整包信息，例如: dotnet run --full 80 443");
         }
-        else
+
+        // 配置网卡关键字
+        sniffer.PreferredDeviceKeyword = string.IsNullOrWhiteSpace(config.DeviceKeyword)
+            ? null
+            : config.DeviceKeyword;
+
+        if (!string.IsNullOrWhiteSpace(config.DeviceKeyword))
         {
-            // 配置指定的端口
-            sniffer.AllowedPorts = ports;
-            sniffer.FilterBySourcePort = true;
-            sniffer.FilterByDestinationPort = true;
-            var portsList = string.Join(", ", ports.OrderBy(p => p));
-            Console.WriteLine($"端口过滤: 已启用，监听端口: {portsList}");
-            Console.WriteLine($"过滤模式: 源端口={sniffer.FilterBySourcePort}, 目标端口={sniffer.FilterByDestinationPort}");
+            Console.WriteLine($"网卡关键字: \"{config.DeviceKeyword}\"（将优先匹配 Name/Description）");
         }
+
         Console.WriteLine();
     }
 
     /// <summary>
     /// 配置 HTTP 路径过滤
     /// 只对 HTTP 请求生效：request_line 里的 PATH 包含任意一个配置片段才会打印
-    /// 默认不过滤（列表为空），只需在这里按需要添加路径关键字
+    /// 路径关键字从配置文件 AppSettings.HttpPathFilters 读取
     /// </summary>
-    private static void ConfigureHttpPathFilter(PacketRouter router)
+    private static void ConfigureHttpPathFilter(PacketRouter router, AppSettings config)
     {
-        // 示例：只关注 /api/user 和 /api/order 相关的 HTTP 请求
-        //router.HttpPathFilters.Add("/api/purchase/enquiry/salePrice");
-        // router.HttpPathFilters.Add("/api/order");
+        router.HttpPathFilters.Clear();
 
-        // 默认：不过滤任何路径
-        // 如果你想只看某个接口，比如 /WeatherForecast，可以这样写：
-        // router.HttpPathFilters.Add("/WeatherForecast");
+        if (config.HttpPathFilters is { Count: > 0 })
+        {
+            foreach (var filter in config.HttpPathFilters.Where(f => !string.IsNullOrWhiteSpace(f)))
+            {
+                router.HttpPathFilters.Add(filter);
+            }
+
+            Console.WriteLine("HTTP 路径过滤已启用，关键字列表：");
+            foreach (var f in router.HttpPathFilters)
+            {
+                Console.WriteLine($"  - {f}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("HTTP 路径过滤未配置，所有 HTTP 请求路径都会打印。");
+        }
+
+        Console.WriteLine();
     }
 }
 

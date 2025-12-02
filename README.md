@@ -61,50 +61,52 @@ dotnet build
 **重要：必须以管理员权限运行！**
 
 ```bash
-# 方式1：监听所有端口（默认）
+# 默认模式：只打印 HTTP Request 的时间 + 方法 + 路径
 dotnet run
 
-# 方式2：监听指定端口（例如：80, 443, 8080）
-dotnet run 80 443 8080
+# 完整模式：打印完整数据包信息（包含 IP/MAC/端口/Body 等）
+dotnet run -- --full
 
-# 方式3：先构建后运行
+# 先构建后运行
 dotnet build
-dotnet bin/Debug/net6.0/PacketSniffer.exe 80 443
+dotnet bin/Debug/net6.0/PacketSniffer.exe
 ```
 
-### 端口配置
+### 配置文件 `config.json`
 
-程序支持通过命令行参数指定要监听的端口：
+所有需要手动调整的内容都集中在根目录的 `config.json`，程序运行时会从 **exe 所在目录** 读取该文件。
 
-- **不指定参数**：监听所有端口（默认行为）
-- **指定端口**：只监听指定的端口（源端口或目标端口匹配即可）
+示例：
 
-**示例：**
-```bash
-# 监听 HTTP 和 HTTPS 流量
-dotnet run 80 443
-
-# 监听多个端口
-dotnet run 80 443 8080 3000 9000
-
-# 监听所有端口
-dotnet run
+```json
+{
+  "DeviceKeyword": "loopback",
+  "Ports": [5005],
+  "FilterSourcePort": true,
+  "FilterDestinationPort": true,
+  "HttpPathFilters": [
+    "/api/"
+  ]
+}
 ```
 
-**端口过滤逻辑：**
-- 如果数据包的**源端口**或**目标端口**在允许列表中，就会被处理
-- 支持同时监听多个端口
-- 端口范围：1-65535
+- **DeviceKeyword**：网卡筛选关键字（匹配 Name/Description）。  
+  例如 `"Intel"`、`"Realtek"`、`"Npcap Loopback"`、`"loopback"`。为空或省略时，将自动选择物理网卡优先，其次 Npcap Loopback。
+- **Ports**：监听的端口列表（源端口或目标端口任一匹配即可）。为空或省略时，监听所有端口。
+- **FilterSourcePort / FilterDestinationPort**：是否按源端口 / 目标端口进行过滤。
+- **HttpPathFilters**：HTTP 请求路径过滤关键字，仅对 **HTTP Request** 生效。  
+  例如 `["/api/"]` 表示只打印路径中包含 `/api/` 的 HTTP 请求。
 
 ### 运行流程
 
-1. 程序启动后会自动选择第一块可用的网络适配器
-2. 开启混杂模式（Promiscuous Mode）进行抓包
-3. 实时捕获 TCP/UDP 数据包的 payload
-4. 自动识别协议类型（JSON → HTTP → Binary）
-5. 解析并提取字段信息
-6. 触发业务逻辑处理
-7. 在控制台输出解析结果
+1. 启动时读取 `config.json`，确定：网卡关键字、监听端口、HTTP 路径过滤规则。
+2. 根据 `DeviceKeyword` 从网卡列表中模糊匹配，优先选择配置指定的网卡；若未配置则自动选择物理网卡优先，其次 Npcap Loopback。  
+   此时控制台会列出所有网卡并标注 `[PHYSICAL]` / `[VIRTUAL]` / `[LOOPBACK]`。
+3. 开启混杂模式（Promiscuous Mode）进行抓包。
+4. 实时捕获 TCP/UDP 包的 payload，并根据端口配置 (`Ports` + FilterSource/FilterDestination) 做过滤。
+5. 自动识别协议类型（JsonParser → HttpParser → BinaryParser）。
+6. 默认模式下：只处理 HTTP Request，解析请求行并打印 `时间 + 方法 + 路径 + 端口`，可选按路径关键字过滤。
+7. 完整模式（`--full`）下：对每个包构建 `PacketInfo`，打印完整的包结构、头部信息和 Payload 摘要。
 
 ### 停止程序
 
@@ -136,28 +138,11 @@ dotnet run
 
 ## 业务逻辑处理
 
-程序会自动检测以下业务场景：
+当前版本默认只做“捕获 + 解析 + 打印”，便于你观察实际流量：
 
-### 1. 用户操作检测
-
-如果解析结果中包含 `userId` 字段：
-```
->>> 检测到用户操作 userId=12345
-```
-
-### 2. 上传操作检测
-
-如果解析结果中包含 `action=upload` 字段：
-```
->>> 触发上传业务逻辑
-```
-
-### 3. HTTP 认证检测
-
-如果是 HTTP 协议且包含 `Authorization` Header：
-```
->>> HTTP Authorization Token: Bearer xxxxxx
-```
+- 默认模式下：只打印 HTTP Request 的时间、方法、路径和端口信息。
+- 完整模式下：打印完整 `PacketInfo`，包括链路层/IP 层/传输层信息及 Payload 概要。
+- 业务处理入口 `HandleBusinessLogic(ParsedResult result)` 仍然保留，方便你后续按解析结果做自定义处理。
 
 ## 自定义扩展
 
@@ -205,74 +190,80 @@ private void HandleBusinessLogic(ParsedResult result)
 
 ## 输出示例
 
-### 监听所有端口
+### 默认模式：只打印 HTTP 请求路径
 
-```
-=== Packet Sniffer Started ===
-端口过滤: 已禁用（监听所有端口）
-提示: 使用命令行参数指定端口，例如: dotnet run 80 443 8080
-Using device: \Device\NPF_{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
-Packet capture started. Press Ctrl+C to stop.
-Press Ctrl+C to stop...
+使用如下配置（`config.json`）示例：
 
-=== Parsed Packet ===
-[TCP] 54321 -> 80
-[http] request_line=GET /api/users HTTP/1.1, header_Authorization=Bearer token123, source_port=54321, destination_port=80, transport_protocol=TCP
-====================
-
->>> HTTP Authorization Token: Bearer token123
+```json
+{
+  "DeviceKeyword": "loopback",
+  "Ports": [5005],
+  "FilterSourcePort": true,
+  "FilterDestinationPort": true,
+  "HttpPathFilters": [
+    "/api/"
+  ]
+}
 ```
 
-### 监听指定端口
+运行输出示例：
 
-```
-=== Packet Sniffer Started ===
-端口过滤: 已启用，监听端口: 80, 443, 8080
+```text
+=== Packet Sniffer - Protocol Parse Mode ===
+已加载配置文件: C:\...\bin\Debug\net6.0\config.json
+端口过滤: 已启用，监听端口: 5005
 过滤模式: 源端口=True, 目标端口=True
-Using device: \Device\NPF_{XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX}
+网卡关键字: "loopback"（将优先匹配 Name/Description）
+HTTP 路径过滤已启用，关键字列表：
+  - /api/
+
+Detected network devices:
+[0] \Device\NPF_{...} - Intel(R) Ethernet Connection [PHYSICAL]
+[1] \Device\NPF_{...} - Npcap Loopback Adapter [LOOPBACK/NPCAP]
+...
+Using device (from config/auto): Npcap Loopback Adapter
 Packet capture started. Press Ctrl+C to stop.
 
-=== Parsed Packet ===
-[TCP] 54321 -> 80
-[json] userId=12345, action=upload, filename=test.jpg, source_port=54321, destination_port=80, transport_protocol=TCP
-====================
-
->>> 检测到用户操作 userId=12345
->>> 触发上传业务逻辑
+======================================================================================================================
+[2025-12-01 16:30:12.345] GET /api/user/123  (src:52345 -> dst:5005)
+======================================================================================================================
+[2025-12-01 16:30:13.001] POST /api/order/create  (src:52346 -> dst:5005)
 ```
 
-## 端口配置说明
+### 完整模式：打印完整包信息
 
-### 配置方式
+```bash
+dotnet run -- --full
+```
 
-1. **命令行参数**（推荐）：
-   ```bash
-   dotnet run 80 443 8080
-   ```
+输出示例（截断）：
 
-2. **代码中配置**（修改 `Program.cs`）：
-   ```csharp
-   sniffer.AllowedPorts = new HashSet<int> { 80, 443, 8080 };
-   sniffer.FilterBySourcePort = true;      // 是否过滤源端口
-   sniffer.FilterByDestinationPort = true; // 是否过滤目标端口
-   ```
+```text
+================================================================================
+数据包捕获时间: 2025-12-01 16:31:00.123
+--------------------------------------------------------------------------------
+数据包长度: 1500 字节
+链路层类型: Ethernet
+源 MAC 地址: AA:BB:CC:DD:EE:FF
+目标 MAC 地址: 11:22:33:44:55:66
 
-### 过滤规则
+网络层协议: IPv4Packet
+IP 版本: IPv4
+源 IP 地址: 192.168.1.100
+目标 IP 地址: 192.168.1.1
+TTL: 64
 
-- **源端口过滤**：如果数据包的源端口在允许列表中，会被处理
-- **目标端口过滤**：如果数据包的目标端口在允许列表中，会被处理
-- **同时匹配**：只要源端口或目标端口任一匹配，就会被处理
-- **不过滤**：如果 `AllowedPorts = null`，则监听所有端口
+传输层协议: TCP
+源端口: 52345
+目标端口: 5005
+TCP 标志: Syn, Ack
 
-### 常见端口
-
-- **80** - HTTP
-- **443** - HTTPS
-- **8080** - HTTP 代理/备用 HTTP
-- **3000** - 开发服务器常用端口
-- **3306** - MySQL
-- **5432** - PostgreSQL
-- **6379** - Redis
+Payload 长度: 256 字节
+Payload (十六进制):
+0000: 47 45 54 20 2F 61 70 69 2F 75 73 65 72 2F 31 32 | GET /api/user/12
+...
+================================================================================
+```
 
 ## 注意事项
 
