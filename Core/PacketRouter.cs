@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Concurrent;
+using System.Linq;
+using System.Security.Cryptography;
 using PacketSniffer.Models;
 using PacketSniffer.Parsers;
 
@@ -76,9 +80,9 @@ public class PacketRouter
             }
 
             // 解析请求行：METHOD SP PATH SP HTTP/...
-            var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var method = parts.Length >= 1 ? parts[0] : string.Empty;
-            var path = parts.Length >= 2 ? parts[1] : string.Empty;
+                var path = parts.Length >= 2 ? parts[1] : string.Empty;
 
             // 可选：按路径过滤（如果配置了 HttpPathFilters）
             if (HttpPathFilters.Count > 0)
@@ -89,7 +93,7 @@ public class PacketRouter
 
                 if (!match)
                 {
-                    // 路径不在关注列表中，直接丢弃
+                    // 不匹配任何关注路径，则直接丢弃该请求（对应响应可能仍然会被抓到）
                     return;
                 }
             }
@@ -99,7 +103,7 @@ public class PacketRouter
             result.Fields["source_port"] = sourcePort.ToString();
             result.Fields["destination_port"] = destinationPort.ToString();
             result.Fields["transport_protocol"] = protocol;
-            result.Fields["http_path"] = path;
+                result.Fields["http_path"] = path;
 
             // 只打印请求时间 + 方法 + 路径
             Console.WriteLine("======================================================================================================================");
@@ -112,9 +116,9 @@ public class PacketRouter
     public void HandleBusinessLogic(ParsedResult result)
     {
         // 如果 Fields 包含 "userId"，打印 "检测到用户操作 userId=xxx"
-        if (result.Fields.ContainsKey("userId"))
+        if (result.Fields.ContainsKey("result"))
         {
-            var userId = result.Fields["userId"];
+            var userId = result.Fields["result"];
             Console.WriteLine($">>> 检测到用户操作 userId={userId}");
         }
 

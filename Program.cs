@@ -1,3 +1,4 @@
+using System.Threading;
 using PacketSniffer.Core;
 using PacketSniffer.Parsers;
 using PacketSniffer.Models;
@@ -15,20 +16,29 @@ class Program
         // 检查是否使用完整包信息模式
         bool fullPacketMode = args.Contains("--full") || args.Contains("-f");
 
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (sender, e) =>
+        {
+            e.Cancel = true;
+            Console.WriteLine("\nStopping packet capture...");
+            _sniffer?.Stop();
+            cts.Cancel();
+        };
+
         if (fullPacketMode)
         {
-            RunFullPacketMode();
+            RunFullPacketMode(cts.Token);
         }
         else
         {
-            RunParseMode();
+            RunParseMode(cts.Token);
         }
     }
 
     /// <summary>
     /// 运行协议解析模式（默认模式）
     /// </summary>
-    private static void RunParseMode()
+    private static void RunParseMode(CancellationToken token)
     {
         Console.WriteLine("=== Packet Sniffer - Protocol Parse Mode ===");
 
@@ -55,24 +65,12 @@ class Program
                 router.Route(payload, sourcePort, destPort, protocol);
             };
 
-            // 注册 Ctrl+C 处理
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                e.Cancel = true;
-                Console.WriteLine("\nStopping packet capture...");
-                _sniffer?.Stop();
-                Environment.Exit(0);
-            };
-
             // 5. 启动 Sniffer
             _sniffer.Start();
 
-            // 6. 持续运行（阻塞主线程）
+            // 6. 等待取消（替代 busy-loop）
             Console.WriteLine("Press Ctrl+C to stop...");
-            while (true)
-            {
-                Thread.Sleep(100);
-            }
+            token.WaitHandle.WaitOne();
         }
         catch (Exception ex)
         {
@@ -88,7 +86,7 @@ class Program
     /// <summary>
     /// 运行完整包信息模式
     /// </summary>
-    private static void RunFullPacketMode()
+    private static void RunFullPacketMode(CancellationToken token)
     {
         Console.WriteLine("=== Packet Sniffer - Full Packet Info Mode ===");
         Console.WriteLine("此模式将打印所有捕获数据包的完整信息\n");
@@ -119,24 +117,12 @@ class Program
                 }
             };
 
-            // 注册 Ctrl+C 处理
-            Console.CancelKeyPress += (sender, e) =>
-            {
-                e.Cancel = true;
-                Console.WriteLine("\n停止抓包...");
-                _sniffer?.Stop();
-                Environment.Exit(0);
-            };
-
             // 5. 启动 Sniffer
             _sniffer.Start();
 
-            // 6. 持续运行（阻塞主线程）
+            // 6. 等待取消（替代 busy-loop）
             Console.WriteLine("按 Ctrl+C 停止...\n");
-            while (true)
-            {
-                Thread.Sleep(100);
-            }
+            token.WaitHandle.WaitOne();
         }
         catch (Exception ex)
         {
