@@ -66,56 +66,53 @@ public class PacketRouter
 
         if (result != null)
         {
-            // 记录时间戳
-            result.Timestamp = DateTime.Now;
-
-            // 添加端口和传输协议信息
-            result.Fields["source_port"] = sourcePort.ToString();
-            result.Fields["destination_port"] = destinationPort.ToString();
-            result.Fields["transport_protocol"] = protocol;
-
-            // HTTP 请求路径过滤（只过滤请求，不过滤响应）
-            if (result.Protocol == "http" &&
-                HttpPathFilters.Count > 0 &&
-                result.Fields.TryGetValue("http_type", out var httpType) &&
-                httpType.Equals("request", StringComparison.OrdinalIgnoreCase) &&
-                result.Fields.TryGetValue("request_line", out var requestLine))
+            // 只关注 HTTP 请求
+            if (!string.Equals(result.Protocol, "http", StringComparison.OrdinalIgnoreCase))
             {
-                // 解析请求路径：METHOD SP PATH SP HTTP/...
-                var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-                var path = parts.Length >= 2 ? parts[1] : string.Empty;
+                return;
+            }
 
+            // 必须是 HTTP REQUEST（不是 RESPONSE）
+            if (!result.Fields.TryGetValue("http_type", out var httpType) ||
+                !httpType.Equals("request", StringComparison.OrdinalIgnoreCase) ||
+                !result.Fields.TryGetValue("request_line", out var requestLine))
+            {
+                return;
+            }
+
+            // 解析请求行：METHOD SP PATH SP HTTP/...
+            var parts = requestLine.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var method = parts.Length >= 1 ? parts[0] : string.Empty;
+            var path = parts.Length >= 2 ? parts[1] : string.Empty;
+
+            // 可选：按路径过滤（如果配置了 HttpPathFilters）
+            if (HttpPathFilters.Count > 0)
+            {
                 var match = HttpPathFilters.Any(filter =>
                     !string.IsNullOrWhiteSpace(filter) &&
                     path.Contains(filter, StringComparison.OrdinalIgnoreCase));
 
                 if (!match)
                 {
-                    // 不匹配任何关注路径，则直接丢弃该请求（对应响应可能仍然会被抓到）
+                    // 路径不在关注列表中，直接丢弃
                     return;
                 }
-
-                // 记录解析后的 path 便于查看
-                result.Fields["http_path"] = path;
             }
 
-            // HTTP 请求/响应方向提示
-            string httpInfo = string.Empty;
-            if (result.Protocol == "http" && result.Fields.TryGetValue("http_type", out var httpType2))
-            {
-                httpInfo = httpType2.Equals("response", StringComparison.OrdinalIgnoreCase)
-                    ? "HTTP RESPONSE"
-                    : "HTTP REQUEST";
-            }
+            // 记录时间戳
+            result.Timestamp = DateTime.Now;
 
-            // 打印解析结果
-            Console.WriteLine("\n=== Parsed Packet ===");
-            Console.WriteLine($"Time: {result.Timestamp:yyyy-MM-dd HH:mm:ss.fff}");
-            Console.WriteLine($"Direction: [{protocol}] {sourcePort} -> {destinationPort} {httpInfo}");
-            Console.WriteLine(result.ToString());
-            Console.WriteLine("====================\n");
+            // 简单记录一些字段（便于后续扩展）
+            result.Fields["source_port"] = sourcePort.ToString();
+            result.Fields["destination_port"] = destinationPort.ToString();
+            result.Fields["transport_protocol"] = protocol;
+            result.Fields["http_path"] = path;
 
-            // 调用业务逻辑
+            // 只打印请求时间 + 方法 + 路径
+            Console.WriteLine("======================================================================================================================");
+            Console.WriteLine($"[{result.Timestamp:yyyy-MM-dd HH:mm:ss.fff}] {method} {path}  (src:{sourcePort} -> dst:{destinationPort})");
+
+            // 如仍希望附加业务逻辑（比如根据路径触发），可以保留
             HandleBusinessLogic(result);
         }
     }

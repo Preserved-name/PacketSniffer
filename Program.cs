@@ -233,7 +233,7 @@ class Program
     private static void ConfigureHttpPathFilter(PacketRouter router)
     {
         // 示例：只关注 /api/user 和 /api/order 相关的 HTTP 请求
-        router.HttpPathFilters.Add("/api/purchase/enquiry/salePrice");
+        //router.HttpPathFilters.Add("/api/purchase/enquiry/salePrice");
         // router.HttpPathFilters.Add("/api/order");
 
         // 默认：不过滤任何路径
