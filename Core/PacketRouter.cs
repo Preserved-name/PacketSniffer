@@ -1,7 +1,4 @@
-using System;
-using System.Collections.Concurrent;
-using System.Linq;
-using System.Security.Cryptography;
+using PacketSniffer.Messaging;
 using PacketSniffer.Models;
 using PacketSniffer.Parsers;
 
@@ -17,6 +14,8 @@ public class PacketRouter
     /// 为空时不过滤，所有路径都打印
     /// </summary>
     public List<string> HttpPathFilters { get; } = new();
+
+    public RabbitProducer Producer { get; set; } = new();
 
     public void RegisterParser(IParser parser)
     {
@@ -103,13 +102,14 @@ public class PacketRouter
             result.Fields["source_port"] = sourcePort.ToString();
             result.Fields["destination_port"] = destinationPort.ToString();
             result.Fields["transport_protocol"] = protocol;
-                result.Fields["http_path"] = path;
+            result.Fields["http_path"] = path;
 
             // 只打印请求时间 + 方法 + 路径
             Console.WriteLine("======================================================================================================================");
             Console.WriteLine($"[{result.Timestamp:yyyy-MM-dd HH:mm:ss.fff}] {method} {path}  (src:{sourcePort} -> dst:{destinationPort})");
 
             // 暂不做后续业务处理；后续有需求时可以在这里调用 HandleBusinessLogic(result)
+            Producer.Send(method + "\t" + path);
         }
     }
 

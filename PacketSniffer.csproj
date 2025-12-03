@@ -1,13 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net6.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="RabbitMQ.Client" Version="6.0.0" />
     <PackageReference Include="SharpPcap" Version="6.2.5" />
     <PackageReference Include="PacketDotNet" Version="1.4.7" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
@@ -15,6 +16,10 @@
 
   <ItemGroup>
     <None Include="config.json" CopyToOutputDirectory="Always" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="新文件夹\" />
   </ItemGroup>
 
 </Project>
