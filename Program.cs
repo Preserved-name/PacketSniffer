@@ -102,7 +102,7 @@ class Program
             // 3. 初始化包信息打印器
             var printer = new PacketPrinter(
                 showPayload: true,
-                maxPayloadBytes: 256,
+                maxPayloadBytes: 1024,
                 showHex: true,
                 showText: true
             );
