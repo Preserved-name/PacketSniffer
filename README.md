@@ -322,3 +322,6 @@ Payload (十六进制):
 
 **⚠️ 免责声明**：本工具仅供学习和合法用途使用，使用者需自行承担使用本工具所产生的法律责任。
 
+
+## Stargazers over time
+[![Stargazers over time](https://starchart.cc/Preserved-name/PacketSniffer.svg?variant=adaptive)](https://starchart.cc/Preserved-name/PacketSniffer)
